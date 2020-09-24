@@ -1,3 +1,30 @@
+<script context="module">
+    export function preload(page) {
+        console.log(page);
+        return this.fetch(
+            "https://svelte-course-6dd11.firebaseio.com/meetups.json"
+        )
+            .then((res) => {
+                if (!res.ok) {
+                    throw new Error("An error occurred, please try again!");
+                }
+                return res.json();
+            })
+            .then((data) => {
+                const loadedMeetups = Object.keys(data).map((key) => {
+                    return { id: key, ...data[key] };
+                });
+                return { fetchedmeetups: loadedMeetups.reverse() };
+                // isLoading = false;
+                // meetups.setMeetups(loadedMeetups.reverse());
+            })
+            .catch((err) => {
+                console.log(err);
+                this.error(500, "Could not fetch meetups");
+            });
+    }
+</script>
+
 <script>
     import { createEventDispatcher, onMount, onDestroy } from "svelte";
     import { scale } from "svelte/transition";
@@ -9,50 +36,30 @@
     import EditMeetup from "../components/Meetup/EditMeetup.svelte";
     import LoadingSpinner from "../components/UI/LoadingSpinner.svelte";
 
-    let fetchedmeetups = [];
+    export let fetchedmeetups;
 
+    let loadedMeetups = [];
     let editMode = null;
     let editedId;
-    let isLoading = true;
+    let isLoading;
+    let unsubscribe
 
     const dispatch = createEventDispatcher();
     let isFiltered = false;
-    let error;
-    let unsubscribe;
 
     $: filteredMeetups = isFiltered
-        ? fetchedmeetups.filter((m) => m.isFavorite)
-        : fetchedmeetups;
+        ? loadedMeetups.filter((m) => m.isFavorite)
+        : loadedMeetups;
 
     onMount(() => {
-        isLoading = true;
-        unsubscribe = meetups.subscribe((items) => (fetchedmeetups = items));
-        fetch("https://svelte-course-6dd11.firebaseio.com/meetups.json")
-            .then((res) => {
-                if (!res.ok) {
-                    throw new Error("An error occurred, please try again!");
-                }
-                return res.json();
-            })
-            .then((data) => {
-                const loadedMeetups = Object.keys(data).map((key) => {
-                    return { id: key, ...data[key] };
-                });
-                isLoading = false;
-                meetups.setMeetups(loadedMeetups.reverse());
-            })
-
-            .catch((err) => {
-                error = err;
-                isLoading = false;
-                console.log(err);
-            });
+        unsubscribe = meetups.subscribe((items) => {
+            loadedMeetups = items;
+        });
+        meetups.setMeetups(fetchedmeetups);
     });
 
     onDestroy(() => {
-        if (unsubscribe) {
-            unsubscribe();
-        }
+        if (unsubscribe) unsubscribe();
     });
 
     function setFilter(event) {
@@ -72,6 +79,10 @@
     function startEdit(event) {
         editMode = "edit";
         editedId = event.detail;
+    }
+
+    function startAdd(event) {
+        editMode = "edit";
     }
 </script>
 
@@ -112,7 +123,7 @@
 {:else}
     <section id="meetup-controls">
         <MeetupFilter {isFiltered} on:select={setFilter} />
-        <Button on:click={() => dispatch('edit', null)}>New Meetup</Button>
+        <Button on:click={startAdd}>New Meetup</Button>
     </section>
     {#if filteredMeetups.length === 0}
         <p id="no-meetups">No meetups found, you can start adding some.</p>
@@ -128,8 +139,7 @@
                     description={meetup.description}
                     imageUrl={meetup.imageUrl}
                     isFavorite={meetup.isFavorite}
-                    on:showdetails
-                    on:edit />
+                    on:edit={startEdit} />
             </div>
         {/each}
     </section>
